@@ -348,6 +348,41 @@ def getAttributesByTagName(dom, tagName):
     return dict(list(elem.attributes.items()))
 
 
+def XMLConfig():
+    """Gether the speedtest.net configuration in XML
+    """
+
+    for url_prefix in conf_server_urls_prefix:
+        url = url_prefix+'speedtest-config.php'
+        try:
+            request = build_request(url)
+            uh = catch_request(request)
+            if uh is False:
+                raise SpeedtestConfigDataError
+            configxml = []
+            while 1:
+                configxml.append(uh.read(10240))
+                if len(configxml[-1]) == 0:
+                    break
+            if int(uh.code) != 200:
+                uh.close
+                raise SpeedtestConfigDataError
+            uh.close()
+        except SpeedtestConfigDataError:
+            continue
+
+        # We were able to fetch and parse the list of speedtest.net servers
+        if configxml:
+            break
+
+    if not configxml:
+        print_('Could not retrieve speedtest.net configuration')
+        sys.exit(1)
+
+
+    return ''.encode().join(configxml)
+
+
 def getConfig():
     """Download the speedtest.net configuration and return only the data
     we are interested in
@@ -402,6 +437,37 @@ def getConfig():
 
 
     return config
+
+
+def XMLServers():
+    """Gether XML list of speedtest.net servers
+    """
+    
+    serversxml = []
+    for url_prefix in conf_server_urls_prefix:
+        url = url_prefix+'speedtest-servers-static.php'
+        try:
+            request = build_request(url)
+            uh = catch_request(request)
+            if uh is False:
+                raise SpeedtestCliServerListError
+            serversxml = []
+            while 1:
+                serversxml.append(uh.read(10240))
+                if len(serversxml[-1]) == 0:
+                    break
+            if int(uh.code) != 200:
+                uh.close()
+                raise SpeedtestCliServerListError
+            uh.close()
+        except SpeedtestCliServerListError:
+            continue
+
+        # We were able to fetch and parse the list of speedtest.net servers
+        if serversxml:
+            break
+
+    return ''.encode().join(serversxml)
 
 
 def closestServers(client, all=False):
@@ -564,6 +630,10 @@ def speedtest():
     parser.add_argument('--simple', action='store_true',
                         help='Suppress verbose output, only show basic '
                              'information')
+    parser.add_argument('--configxml', action='store_true',
+                        help='Display a XML list of speedtest.net config ')
+    parser.add_argument('--listxml', action='store_true',
+                        help='Display a XML list of speedtest.net servers ')
     parser.add_argument('--list', action='store_true',
                         help='Display a list of speedtest.net servers '
                              'sorted by distance')
@@ -596,7 +666,12 @@ def speedtest():
     if not args.simple:
         print_('Retrieving speedtest.net configuration...')
     try:
-        config = getConfig()
+        if args.configxml:
+            config = XMLConfig()
+            print config
+            sys.exit(0)
+        else:
+            config = getConfig()
     except URLError:
         print_('Cannot retrieve speedtest configuration')
         sys.exit(1)
@@ -622,6 +697,10 @@ def speedtest():
             except IOError:
                 pass
             sys.exit(0)
+    elif args.listxml:
+        servers = XMLServers()
+        print servers
+        sys.exit(0)
     else:
         servers = closestServers(config['client'])
 
