@@ -352,6 +352,7 @@ def XMLConfig():
     """Gether the speedtest.net configuration in XML
     """
 
+    configxml = []
     for url_prefix in conf_server_urls_prefix:
         url = url_prefix+'speedtest-config.php'
         try:
