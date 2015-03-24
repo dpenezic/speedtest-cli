@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Copyright 2012-2014 Matt Martz
+# Copyright 2012-2014 Matt Martz, 2015 Dubravko Penezic
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -24,7 +24,7 @@ import socket
 import timeit
 import threading
 
-__version__ = '0.3.2'
+__version__ = '0.3.3'
 
 # Some global variables we use
 user_agent = 'speedtest-cli/%s' % __version__
