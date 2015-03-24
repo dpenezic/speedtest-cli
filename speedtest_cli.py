@@ -439,6 +439,47 @@ def getConfig():
     return config
 
 
+def getConfigFile(filename):
+    """Read the speedtest.net configuration from file and return only the data
+    we are interested in
+    """
+
+    config = {}
+
+    if not os.path.isfile(filename):
+        print_('Could not find configuration file ' + filename)
+        sys.exit(1)
+    
+    with open (filename, "r") as myfile:
+        configxml=myfile.readlines()
+
+    try:
+        try:
+            root = ET.fromstring(''.encode().join(configxml))
+            config = {
+                'client': root.find('client').attrib,
+                'times': root.find('times').attrib,
+                'download': root.find('download').attrib,
+                'upload': root.find('upload').attrib}
+        except AttributeError:  # Python3 branch
+            root = DOM.parseString(''.join(configxml))
+            config = {
+                'client': getAttributesByTagName(root, 'client'),
+                'times': getAttributesByTagName(root, 'times'),
+                'download': getAttributesByTagName(root, 'download'),
+                'upload': getAttributesByTagName(root, 'upload')}
+    except SyntaxError:
+        pass 
+    del configxml
+
+    if not config:
+        print_('Could not read speedtest.net configuration from ' + filename)
+        sys.exit(1)
+
+
+    return config
+
+
 def XMLServers():
     """Gether XML list of speedtest.net servers
     """
@@ -527,6 +568,67 @@ def closestServers(client, all=False):
 
     if not servers:
         print_('Failed to retrieve list of speedtest.net servers')
+        sys.exit(1)
+
+    closest = []
+    for d in sorted(servers.keys()):
+        for s in servers[d]:
+            closest.append(s)
+            if len(closest) == 5 and not all:
+                break
+        else:
+            continue
+        break
+
+    del servers
+    return closest
+
+
+def closestServersFile(client, filename, all=False):
+    """Determine the 5 closest speedtest.net servers based on geographic
+    distance from server XML file
+    """
+
+    servers = {}
+
+    if not os.path.isfile(filename):
+        print_('Could not find servers list file ' + filename)
+        sys.exit(1)
+
+    with open (filename, "r") as myfile:
+        serversxml=myfile.readlines()
+
+    try:
+        try:
+            root = ET.fromstring(''.encode().join(serversxml))
+            elements = root.getiterator('server')
+        except AttributeError:  # Python3 branch
+            root = DOM.parseString(''.join(serversxml))
+            elements = root.getElementsByTagName('server')
+    except SyntaxError:
+        print_('Syntax error to retrieve list of speedtest.net serversi from file ' + filename)
+        sys.exit(1)
+
+    for server in elements:
+        try:
+            attrib = server.attrib
+        except AttributeError:
+            attrib = dict(list(server.attributes.items()))
+        d = distance([float(client['lat']),
+                      float(client['lon'])],
+                     [float(attrib.get('lat')),
+                      float(attrib.get('lon'))])
+        attrib['d'] = d
+        if d not in servers:
+            servers[d] = [attrib]
+        else:
+            servers[d].append(attrib)
+    del root
+    del serversxml
+    del elements
+
+    if not servers:
+        print_('Failed to retrieve list of speedtest.net servers from file ' + filename)
         sys.exit(1)
 
     closest = []
@@ -632,11 +734,13 @@ def speedtest():
                              'information')
     parser.add_argument('--configxml', action='store_true',
                         help='Display a XML list of speedtest.net config ')
+    parser.add_argument('--configfile', help='Path to XML config file')
     parser.add_argument('--listxml', action='store_true',
                         help='Display a XML list of speedtest.net servers ')
     parser.add_argument('--list', action='store_true',
                         help='Display a list of speedtest.net servers '
                              'sorted by distance')
+    parser.add_argument('--listfile', help='Path to XML server list file')
     parser.add_argument('--server', help='Specify a server ID to test against')
     parser.add_argument('--mini', help='URL of the Speedtest Mini server')
     parser.add_argument('--source', help='Source IP address to bind to')
@@ -670,6 +774,8 @@ def speedtest():
             config = XMLConfig()
             print config
             sys.exit(0)
+        elif args.configfile:
+            config = getConfigFile(args.configfile)
         else:
             config = getConfig()
     except URLError:
@@ -679,7 +785,11 @@ def speedtest():
     if not args.simple:
         print_('Retrieving speedtest.net server list...')
     if args.list or args.server:
-        servers = closestServers(config['client'], True)
+        if args.listfile:
+            servers = closestServersFile(config['client'], args.listfile, True)
+        else:
+            servers = closestServers(config['client'], True)
+
         if args.list:
             serverList = []
             for server in servers:
@@ -702,7 +812,10 @@ def speedtest():
         print servers
         sys.exit(0)
     else:
-        servers = closestServers(config['client'])
+        if args.listfile:
+            servers = closestServersFile(config['client'], args.listfile)
+        else:
+            servers = closestServers(config['client'])
 
     if not args.simple:
         print_('Testing from %(isp)s (%(ip)s)...' % config['client'])
